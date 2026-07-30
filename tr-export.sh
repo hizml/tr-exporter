@@ -66,11 +66,17 @@ echo
 # 排除 /kettu/templates/torrents 等「假目录」：只认含 40 位 hex .torrent 文件的目录
 echo "正在定位种子目录..."
 TORRENTS_DIR=""
-for d in $(find / -type d -name torrents 2>/dev/null); do
-  if ls "$d"/*.torrent >/dev/null 2>&1 && ls "$d" | grep -qE '^[0-9a-fA-F]{40}\.torrent$'; then
-    TORRENTS_DIR="$d"; break
-  fi
-done
+find / -type d -name torrents 2>/dev/null | while IFS= read -r d; do
+  [ -z "$d" ] && continue
+  for f in "$d"/*.torrent; do
+    [ -e "$f" ] || continue
+    b=$(basename "$f" .torrent)
+    case "$b" in *[!0-9a-fA-F]*) continue ;; esac
+    [ ${#b} -eq 40 ] && { echo "$d"; break; }
+  done
+done | head -1 > /tmp/tr_dir_$$.txt
+read -r TORRENTS_DIR < /tmp/tr_dir_$$.txt
+rm -f /tmp/tr_dir_$$.txt
 if [ -z "$TORRENTS_DIR" ]; then
   printf "❌ 自动定位失败，请手动输入 torrents 目录路径: "
   read TORRENTS_DIR
@@ -113,7 +119,6 @@ OUT="/config/export_$(date +%Y%m%d_%H%M%S)"
 # 如果 /config 不存在(非容器环境)，退回到当前目录
 mkdir -p "$OUT" 2>/dev/null || OUT="./export_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$OUT"
-OK=0; MISS=0
 curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
   -d '{"method":"torrent-get","arguments":{"fields":["name","hashString","trackers"]}}' \
 | jq -c '.arguments.torrents[]' | while read -r t; do
@@ -136,7 +141,8 @@ done
 echo
 echo "===== 完成 ====="
 echo "导出目录: $OUT"
-TOTAL=$(ls -1 "$OUT" 2>/dev/null | grep -c '\.torrent$')
+TOTAL=0
+for _f in "$OUT"/*.torrent; do [ -e "$_f" ] && TOTAL=$((TOTAL+1)); done
 echo "导出数量: $TOTAL 个"
 
 # ---------- 9. 打包 zip 便于下载 ----------

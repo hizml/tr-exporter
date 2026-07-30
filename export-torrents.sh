@@ -81,7 +81,41 @@ command -v jq >/dev/null || { echo "❌ 无法安装 jq，请手动安装后重�
 
 # cookie 文件 (qB 登录用)
 COOKIE=$(mktemp)
-trap 'rm -f "$COOKIE"' EXIT
+trap 'rm -f "$COOKIE" /tmp/tr_find_*.txt' EXIT 2>/dev/null
+
+# 工具函数: 在目录中是否存在匹配指定后缀且符合 hex 文件名的文件
+#   has_hex_files <目录> <后缀> <期望hex长度(0=不校验长度)>
+has_hex_files() {
+  _dir="$1"; _suf="$2"; _len="$3"
+  for f in "$_dir"/*."$_suf"; do
+    [ -e "$f" ] || continue
+    _b=$(basename "$f" ".$_suf")
+    [ "$_len" = "0" ] && return 0
+    # 校验: 纯 hex 且长度匹配
+    case "$_b" in
+      *[!0-9a-fA-F]*) continue ;;
+      *)
+        [ ${#_b} -eq "$_len" ] && return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+# 工具函数: 用 find -exec + while read 安全地查找目录 (避免 for-in-find 在含空格路径上出错)
+#   find_first_dir <目录名> <后缀> <期望hex长度(0=不校验)>
+find_first_dir() {
+  _name="$1"; _suf="$2"; _len="$3"
+  find / -type d -name "$_name" 2>/dev/null > /tmp/tr_find_$$.txt
+  while IFS= read -r _d; do
+    [ -z "$_d" ] && continue
+    if has_hex_files "$_d" "$_suf" "$_len"; then
+      printf '%s' "$_d"; return 0
+    fi
+  done < /tmp/tr_find_$$.txt
+  rm -f /tmp/tr_find_$$.txt
+  return 1
+}
 
 # ============================================================
 # 4. 连接 + 认证
@@ -118,11 +152,7 @@ echo
 TORRENTS_DIR=""
 if [ "$CLIENT" = "tr" ]; then
   echo "正在定位种子目录..."
-  for d in $(find / -type d -name torrents 2>/dev/null); do
-    if ls "$d"/*.torrent >/dev/null 2>&1 && ls "$d" | grep -qE '^[0-9a-fA-F]{40}\.torrent$'; then
-      TORRENTS_DIR="$d"; break
-    fi
-  done
+  TORRENTS_DIR=$(find_first_dir torrents torrent 40)
   if [ -z "$TORRENTS_DIR" ]; then
     printf "❌ 自动定位失败，请手动输入 torrents 目录路径 (留空取消): "
     read TORRENTS_DIR
@@ -141,9 +171,7 @@ fi
 # qBittorrent 的进度目录: BT_backup(<hash>.fastresume)
 QB_RESUME_DIR=""
 if [ "$CLIENT" = "qb" ]; then
-  for d in $(find / -type d -name BT_backup 2>/dev/null); do
-    if ls "$d"/*.fastresume >/dev/null 2>&1; then QB_RESUME_DIR="$d"; break; fi
-  done
+  QB_RESUME_DIR=$(find_first_dir BT_backup fastresume 40)
 fi
 
 # ============================================================
@@ -283,10 +311,15 @@ fi
 echo
 echo "===== 完成 ====="
 echo "导出目录: $OUT"
-TOTAL=$(ls -1 "$OUT/torrents" 2>/dev/null | grep -c '\.torrent$')
+# 用 glob 循环计数 (兼容路径含空格，且无匹配时不报错)
+TOTAL=0
+for _f in "$OUT/torrents/"*.torrent; do [ -e "$_f" ] && TOTAL=$((TOTAL+1)); done
 echo "种子数量: $TOTAL 个"
 if [ "$EXPORT_RESUME" != "n" ]; then
-  RTOTAL=$(ls -1 "$OUT/resume" 2>/dev/null | grep -cE '\.(resume|fastresume)$')
+  RTOTAL=0
+  for _f in "$OUT/resume/"*.resume "$OUT/resume/"*.fastresume; do
+    [ -e "$_f" ] && RTOTAL=$((RTOTAL+1))
+  done
   echo "进度文件: $RTOTAL 个"
 fi
 
