@@ -1,0 +1,8 @@
+# 导出产物
+export_*/
+*.zip
+export_*.tar
+
+# 临时文件
+*.tmp
+*.log
