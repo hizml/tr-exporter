@@ -1,0 +1,244 @@
+#!/bin/sh
+# export-torrents.sh — 按 Tracker 批量导出 Transmission / qBittorrent 的 .torrent 种子文件
+# 交互式：选择客户端 → 输入地址/端口/认证 → 选 Tracker 或全部导出 → 导出后自动打包 zip。
+# 适用：Docker / QNAP Container Station 终端等无 SSH 场景，或任意能访问 Web API 的环境。
+
+echo "===== 种子导出工具 (Transmission / qBittorrent) ====="
+echo
+
+# ============================================================
+# 0. 选择客户端
+# ============================================================
+echo "【选择客户端】"
+echo "   1) Transmission"
+echo "   2) qBittorrent"
+printf "选择序号 (留空=默认 1): "
+read CLIENT_INPUT
+case "$CLIENT_INPUT" in
+  2) CLIENT="qb" ;;
+  *) CLIENT="tr" ;;
+esac
+[ "$CLIENT" = "qb" ] && echo "  → qBittorrent" || echo "  → Transmission"
+echo
+
+# ============================================================
+# 1. 地址 + 端口
+# ============================================================
+echo "【Web 地址】"
+echo "  常见主机预设："
+echo "   1) 127.0.0.1   (容器内本机，最常用)"
+echo "   2) localhost"
+echo "   3) 自定义 IP / 域名  (例如 NAS 局域网 IP，从容器外访问)"
+printf "选择序号或直接输入主机 (留空=默认 1): "
+read HOST_INPUT
+case "$HOST_INPUT" in
+  ""|1) HOST="127.0.0.1" ;;
+  2)    HOST="localhost" ;;
+  3)    printf "    请输入主机 IP/域名: "; read HOST ;;
+  *)    HOST="$HOST_INPUT" ;;
+esac
+
+# 默认端口：Transmission=9091，qBittorrent=8080
+if [ "$CLIENT" = "qb" ]; then DEFAULT_PORT="8080"; else DEFAULT_PORT="9091"; fi
+printf "端口 (留空=默认 %s): " "$DEFAULT_PORT"
+read PORT_INPUT
+[ -z "$PORT_INPUT" ] && PORT_INPUT="$DEFAULT_PORT"
+
+if [ "$CLIENT" = "qb" ]; then
+  BASE="http://${HOST}:${PORT_INPUT}"
+  API="$BASE/api/v2"
+else
+  RPC="http://${HOST}:${PORT_INPUT}/transmission/rpc"
+fi
+echo "  → 使用: ${RPC:-$BASE}"
+echo
+
+# ============================================================
+# 2. 账号密码
+# ============================================================
+printf "【认证】用户名 (无认证可留空): "
+read USER
+if [ -n "$USER" ]; then
+  printf "密码: "
+  stty -echo 2>/dev/null
+  read PASS
+  stty echo 2>/dev/null
+  echo
+  AUTH="-u ${USER}:${PASS}"
+else
+  AUTH=""
+  echo "  → 跳过认证"
+fi
+
+# ============================================================
+# 3. 依赖
+# ============================================================
+command -v jq >/dev/null || {
+  echo "正在安装 jq..."
+  apk add --no-cache jq 2>/dev/null || { apt-get update >/dev/null 2>&1 && apt-get install -y jq >/dev/null 2>&1; }
+}
+command -v jq >/dev/null || { echo "❌ 无法安装 jq，请手动安装后重试"; exit 1; }
+
+# cookie 文件 (qB 登录用)
+COOKIE=$(mktemp)
+trap 'rm -f "$COOKIE"' EXIT
+
+# ============================================================
+# 4. 连接 + 认证
+# ============================================================
+echo "正在连接..."
+
+if [ "$CLIENT" = "tr" ]; then
+  # Transmission: 拿 session-id
+  SID=$(curl -s $AUTH -D - -o /dev/null "$RPC" | grep -i 'X-Transmission-Session-Id' | awk '{print $2}' | tr -d '\r')
+  COUNT=$(curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
+    -d '{"method":"torrent-get","arguments":{"fields":["id"]}}' | jq '.arguments.torrents|length' 2>/dev/null)
+else
+  # qBittorrent: 登录拿 SID cookie (需带 Referer 绕过 CSRF)
+  if [ -n "$USER" ]; then
+    LOGIN_BODY=$(curl -s -c "$COOKIE" -b "$COOKIE" -H "Referer: $BASE" \
+      --data-urlencode "username=$USER" --data-urlencode "password=$PASS" \
+      "$API/auth/login")
+    if [ "$LOGIN_BODY" != "Ok." ]; then
+      echo "❌ 登录失败: $LOGIN_BODY"; exit 1
+    fi
+  fi
+  COUNT=$(curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" | jq 'length' 2>/dev/null)
+fi
+
+if ! echo "$COUNT" | grep -qE '^[0-9]+$'; then
+  echo "❌ 连接失败，请检查地址 / 端口 / 账号 / 密码"; exit 1
+fi
+echo "✅ 连接成功，共 $COUNT 个种子"
+echo
+
+# ============================================================
+# 5. 定位种子目录 (仅 Transmission 用磁盘方式；qB 用 API 导出，无需)
+# ============================================================
+TORRENTS_DIR=""
+if [ "$CLIENT" = "tr" ]; then
+  echo "正在定位种子目录..."
+  for d in $(find / -type d -name torrents 2>/dev/null); do
+    if ls "$d"/*.torrent >/dev/null 2>&1 && ls "$d" | grep -qE '^[0-9a-fA-F]{40}\.torrent$'; then
+      TORRENTS_DIR="$d"; break
+    fi
+  done
+  if [ -z "$TORRENTS_DIR" ]; then
+    printf "❌ 自动定位失败，请手动输入 torrents 目录路径 (留空取消): "
+    read TORRENTS_DIR
+    [ -z "$TORRENTS_DIR" ] && { echo "已取消"; exit 1; }
+  fi
+  echo "种子目录: $TORRENTS_DIR"
+  echo
+fi
+
+# ============================================================
+# 6. 列出 Tracker
+# ============================================================
+echo "===== Tracker 列表 ====="
+if [ "$CLIENT" = "tr" ]; then
+  curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
+    -d '{"method":"torrent-get","arguments":{"fields":["trackers"]}}' \
+    | jq -r '.arguments.torrents[].trackers[].announce'
+else
+  curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
+    | jq -r '.[].tracker'
+fi | sed -E 's#https?://([^/]+).*#\1#' | sort -u > /tmp/tr_list.txt
+
+i=1
+while read -r line; do
+  printf "  %s) %s\n" "$i" "$line"
+  i=$((i+1))
+done < /tmp/tr_list.txt
+ALL_N=$i
+printf "  %s) 全部导出\n" "$ALL_N"
+echo
+
+# ============================================================
+# 7. 选择 Tracker
+# ============================================================
+printf "选择序号，或直接输入关键字 (留空=全部): "
+read SEL
+KEY=""
+if echo "$SEL" | grep -qE '^[0-9]+$'; then
+  if [ "$SEL" -eq "$ALL_N" ]; then KEY=""; echo "→ 全部导出"
+  else KEY=$(sed -n "${SEL}p" /tmp/tr_list.txt); echo "→ 选择: $KEY"; fi
+elif [ -z "$SEL" ]; then
+  echo "→ 全部导出"
+else
+  KEY="$SEL"; echo "→ 关键字: $KEY"
+fi
+echo
+
+# ============================================================
+# 8. 导出
+# ============================================================
+OUT="/config/export_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$OUT" 2>/dev/null || OUT="./export_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$OUT"
+
+export AUTH SID RPC API BASE COOKIE CLIENT KEY OUT TORRENTS_DIR
+
+if [ "$CLIENT" = "tr" ]; then
+  # Transmission: 从磁盘复制 .torrent
+  curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
+    -d '{"method":"torrent-get","arguments":{"fields":["name","hashString","trackers"]}}' \
+  | jq -c '.arguments.torrents[]' | while read -r t; do
+      MATCH=0
+      if [ -z "$KEY" ]; then MATCH=1
+      elif echo "$t" | jq -r '.trackers[].announce' | grep -qi "$KEY"; then MATCH=1; fi
+      if [ "$MATCH" = "1" ]; then
+        name=$(echo "$t" | jq -r '.name')
+        hash=$(echo "$t" | jq -r '.hashString')
+        src="$TORRENTS_DIR/$hash.torrent"
+        if [ -f "$src" ]; then
+          cp "$src" "$OUT/${hash}.torrent"
+          printf "[OK]   %s\n" "$name"
+        else
+          printf "[MISS] %s\n" "$name"
+        fi
+      fi
+    done
+else
+  # qBittorrent: 用 API 逐个导出
+  curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
+    | jq -c '.[]' | while read -r t; do
+        name=$(echo "$t" | jq -r '.name')
+        hash=$(echo "$t" | jq -r '.hash')
+        tracker=$(echo "$t" | jq -r '.tracker')
+        MATCH=0
+        if [ -z "$KEY" ]; then MATCH=1
+        elif echo "$tracker" | grep -qi "$KEY"; then MATCH=1; fi
+        if [ "$MATCH" = "1" ]; then
+          dst="$OUT/${hash}.torrent"
+          http=$(curl -s -b "$COOKIE" -H "Referer: $BASE" -o "$dst" -w "%{http_code}" \
+            "$API/torrents/export?hash=$hash")
+          # 校验：成功的 .torrent 是 bencode，首字符为 'd'
+          if [ "$http" = "200" ] && [ -s "$dst" ] && head -c1 "$dst" | grep -q 'd'; then
+            printf "[OK]   %s\n" "$name"
+          else
+            rm -f "$dst"
+            printf "[FAIL] %s (HTTP %s，可能 qB 版本过旧不支持 export)\n" "$name" "$http"
+          fi
+        fi
+      done
+fi
+
+echo
+echo "===== 完成 ====="
+echo "导出目录: $OUT"
+TOTAL=$(ls -1 "$OUT" 2>/dev/null | grep -c '\.torrent$')
+echo "导出数量: $TOTAL 个"
+
+# ============================================================
+# 9. 打包 zip
+# ============================================================
+if command -v zip >/dev/null; then
+  BASE_NAME="${OUT##*/}"
+  (cd "$(dirname "$OUT")" && zip -qr "${BASE_NAME}.zip" "$BASE_NAME")
+  echo "已打包: $(dirname "$OUT")/${BASE_NAME}.zip"
+  echo "→ 用文件管理器(FileStation 等)下载这一个 zip 文件即可，避免多选下载漏文件。"
+else
+  echo "提示: 未安装 zip，请在文件管理器中直接下载文件夹 $OUT"
+  echo "     (若想打包: apk add zip 或 apt-get install zip)"
+fi
