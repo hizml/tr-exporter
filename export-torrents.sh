@@ -132,6 +132,20 @@ if [ "$CLIENT" = "tr" ]; then
   echo
 fi
 
+# Transmission 的 resume 目录: 与 torrents 同级的 resume 目录(<hash>.resume)
+TR_RESUME_DIR=""
+if [ "$CLIENT" = "tr" ] && [ -n "$TORRENTS_DIR" ]; then
+  TR_RESUME_DIR=$(dirname "$TORRENTS_DIR")/resume
+  [ -d "$TR_RESUME_DIR" ] || TR_RESUME_DIR=""
+fi
+# qBittorrent 的进度目录: BT_backup(<hash>.fastresume)
+QB_RESUME_DIR=""
+if [ "$CLIENT" = "qb" ]; then
+  for d in $(find / -type d -name BT_backup 2>/dev/null); do
+    if ls "$d"/*.fastresume >/dev/null 2>&1; then QB_RESUME_DIR="$d"; break; fi
+  done
+fi
+
 # ============================================================
 # 6. 列出 Tracker
 # ============================================================
@@ -170,17 +184,45 @@ else
 fi
 echo
 
+# ---------- 是否同时导出进度文件 ----------
+EXPORT_RESUME="n"
+if [ "$CLIENT" = "tr" ]; then
+  PROGRESS_DESC="进度文件 (.resume，用于同版本 Transmission 迁移)"
+  HAVE_DIR="$TR_RESUME_DIR"
+else
+  PROGRESS_DESC="进度文件 (.fastresume，用于 qBittorrent 迁移)"
+  HAVE_DIR="$QB_RESUME_DIR"
+fi
+printf "【进度】是否同时导出 %s? (y/N): " "$PROGRESS_DESC"
+read RESUME_INPUT
+case "$RESUME_INPUT" in
+  y|Y|yes|YES)
+    if [ -z "$HAVE_DIR" ]; then
+      printf "  ⚠️ 未自动定位到进度目录，请手动输入路径 (留空=跳过进度): "
+      read HAVE_DIR
+      [ -z "$HAVE_DIR" ] && { echo "  → 跳过进度导出"; HAVE_DIR=""; }
+    fi
+    EXPORT_RESUME="$HAVE_DIR"
+    echo "  → 导出进度: $EXPORT_RESUME"
+    ;;
+  *)
+    echo "  → 跳过进度导出"
+    ;;
+esac
+echo
+
 # ============================================================
 # 8. 导出
 # ============================================================
 OUT="/config/export_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$OUT" 2>/dev/null || OUT="./export_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$OUT"
+mkdir -p "$OUT/torrents"
+[ "$EXPORT_RESUME" != "n" ] && mkdir -p "$OUT/resume"
 
-export AUTH SID RPC API BASE COOKIE CLIENT KEY OUT TORRENTS_DIR
+export AUTH SID RPC API BASE COOKIE CLIENT KEY OUT TORRENTS_DIR EXPORT_RESUME
 
 if [ "$CLIENT" = "tr" ]; then
-  # Transmission: 从磁盘复制 .torrent
+  # Transmission: 从磁盘复制 .torrent (+ 可选 .resume)
   curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
     -d '{"method":"torrent-get","arguments":{"fields":["name","hashString","trackers"]}}' \
   | jq -c '.arguments.torrents[]' | while read -r t; do
@@ -192,15 +234,22 @@ if [ "$CLIENT" = "tr" ]; then
         hash=$(echo "$t" | jq -r '.hashString')
         src="$TORRENTS_DIR/$hash.torrent"
         if [ -f "$src" ]; then
-          cp "$src" "$OUT/${hash}.torrent"
-          printf "[OK]   %s\n" "$name"
+          cp "$src" "$OUT/torrents/${hash}.torrent"
+          # 可选: 复制进度文件
+          rlog=""
+          if [ "$EXPORT_RESUME" != "n" ]; then
+            rsrc="$EXPORT_RESUME/$hash.resume"
+            if [ -f "$rsrc" ]; then cp "$rsrc" "$OUT/resume/${hash}.resume"; rlog=" +resume"
+            else rlog=" [no-resume]"; fi
+          fi
+          printf "[OK]   %s%s\n" "$name" "$rlog"
         else
           printf "[MISS] %s\n" "$name"
         fi
       fi
     done
 else
-  # qBittorrent: 用 API 逐个导出
+  # qBittorrent: 用 API 逐个导出 (+ 可选 .fastresume)
   curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
     | jq -c '.[]' | while read -r t; do
         name=$(echo "$t" | jq -r '.name')
@@ -210,12 +259,19 @@ else
         if [ -z "$KEY" ]; then MATCH=1
         elif echo "$tracker" | grep -qi "$KEY"; then MATCH=1; fi
         if [ "$MATCH" = "1" ]; then
-          dst="$OUT/${hash}.torrent"
+          dst="$OUT/torrents/${hash}.torrent"
           http=$(curl -s -b "$COOKIE" -H "Referer: $BASE" -o "$dst" -w "%{http_code}" \
             "$API/torrents/export?hash=$hash")
           # 校验：成功的 .torrent 是 bencode，首字符为 'd'
           if [ "$http" = "200" ] && [ -s "$dst" ] && head -c1 "$dst" | grep -q 'd'; then
-            printf "[OK]   %s\n" "$name"
+            # 可选: 复制进度文件
+            rlog=""
+            if [ "$EXPORT_RESUME" != "n" ]; then
+              rsrc="$EXPORT_RESUME/$hash.fastresume"
+              if [ -f "$rsrc" ]; then cp "$rsrc" "$OUT/resume/${hash}.fastresume"; rlog=" +resume"
+              else rlog=" [no-resume]"; fi
+            fi
+            printf "[OK]   %s%s\n" "$name" "$rlog"
           else
             rm -f "$dst"
             printf "[FAIL] %s (HTTP %s，可能 qB 版本过旧不支持 export)\n" "$name" "$http"
@@ -227,8 +283,12 @@ fi
 echo
 echo "===== 完成 ====="
 echo "导出目录: $OUT"
-TOTAL=$(ls -1 "$OUT" 2>/dev/null | grep -c '\.torrent$')
-echo "导出数量: $TOTAL 个"
+TOTAL=$(ls -1 "$OUT/torrents" 2>/dev/null | grep -c '\.torrent$')
+echo "种子数量: $TOTAL 个"
+if [ "$EXPORT_RESUME" != "n" ]; then
+  RTOTAL=$(ls -1 "$OUT/resume" 2>/dev/null | grep -cE '\.(resume|fastresume)$')
+  echo "进度文件: $RTOTAL 个"
+fi
 
 # ============================================================
 # 9. 打包 zip

@@ -1,0 +1,33 @@
+name: ShellCheck
+
+# 每次推送 .sh 文件、或发起 PR 时，自动运行 ShellCheck 静态检查
+# 发现脚本隐患（变量未引用、不安全条件判断等）会在 GitHub 上标红告警
+on:
+  push:
+    paths:
+      - '**.sh'
+      - '.github/workflows/shellcheck.yml'
+  pull_request:
+    paths:
+      - '**.sh'
+
+jobs:
+  shellcheck:
+    name: Check shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          # 对所有 .sh 脚本进行检查
+          severity: warning
+          # 忽略部分对交互式脚本无意义的规则：
+          #   SC2162: read 不带 -r（交互式脚本可接受）
+          #   SC2086: 变量未加引号（curl 参数刻意分词）
+          ignore_names: ""
+          additional_files: ""
+        env:
+          SHELLCHECK_OPTS: -e SC2162 -e SC2086 -e SC1090 -e SC1091

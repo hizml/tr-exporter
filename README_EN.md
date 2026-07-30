@@ -95,7 +95,27 @@ Use the NAS file manager (QNAP FileStation, etc.) to open the mapped `/config` f
 |------|------|
 | A number, e.g. `1` | Select the 1st tracker in the list |
 | A keyword, e.g. `soulvoice` | Case-insensitive fuzzy match |
-| Empty (Enter) | **Export all** |
+| **Empty (Enter)** | **Export every torrent (all trackers)** |
+
+> 💡 Want to export all torrents at once? Just press **Enter** at the tracker prompt.
+
+## Exporting progress (for migration)
+
+After choosing a tracker, the script asks whether to also export progress files — enter `y`. Progress files let you migrate to another machine **without re-checking**:
+
+| Client | Progress file | Migration scope |
+|--------|---------------|-----------------|
+| Transmission | `<hash>.resume` | between same-version Transmission |
+| qBittorrent | `<hash>.fastresume` | between qBittorrent instances |
+
+Resulting directory layout:
+```
+export_xxxxxx/
+├── torrents/    ← .torrent files
+└── resume/      ← progress files (only when progress export is chosen)
+```
+
+> ⚠️ Progress files are **NOT portable across clients** (Tr's resume can't be used by qB, and vice versa). For cross-client migration, use the target client's "load torrent + same data path + recheck" flow.
 
 ## How export works per client
 
@@ -132,8 +152,9 @@ A: Usually wrong host/port/credentials. Check whether Authentication is enabled 
 
 ## Limitations
 
-- Exports the raw `.torrent` file only — **does not include download progress** (`.resume`).
-- To migrate to another client while keeping progress, you still need the target client's "load torrent + same data path + recheck" flow; `.resume` files are not portable across clients.
+- Exports the raw `.torrent` file by default; **progress files are optional** (see "Exporting progress" above).
+- Progress files are **NOT portable across clients**; for cross-client migration, use the target client's "load torrent + same data path + recheck" flow.
+- This project ships with automated [ShellCheck](https://www.shellcheck.net/) via GitHub Actions, but the script is not tested on every client version — validate on a small batch first.
 
 ## License
 
