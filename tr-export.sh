@@ -8,20 +8,24 @@ echo
 
 # ---------- 1. RPC 地址 ----------
 echo "【RPC 地址】"
-echo "  常见预设："
-echo "   1) http://127.0.0.1:9091/transmission/rpc   (容器内本机，最常用)"
-echo "   2) http://localhost:9091/transmission/rpc"
-echo "   3) http://NAS_IP:9091/transmission/rpc       (从容器外访问 NAS)"
-echo "   4) 自定义输入"
-printf "选择序号或直接输入地址 (留空=默认 1): "
-read RPC_INPUT
-case "$RPC_INPUT" in
-  ""|1) RPC="http://127.0.0.1:9091/transmission/rpc" ;;
-  2)    RPC="http://localhost:9091/transmission/rpc" ;;
-  3)    printf "    请输入 NAS 的 IP: "; read NAS_IP
-        RPC="http://${NAS_IP}:9091/transmission/rpc" ;;
-  *)    RPC="$RPC_INPUT" ;;
+echo "  常见主机预设："
+echo "   1) 127.0.0.1   (容器内本机，最常用)"
+echo "   2) localhost"
+echo "   3) 自定义 IP / 域名  (例如 NAS 局域网 IP，从容器外访问)"
+printf "选择序号或直接输入主机 (留空=默认 1): "
+read HOST_INPUT
+case "$HOST_INPUT" in
+  ""|1) HOST="127.0.0.1" ;;
+  2)    HOST="localhost" ;;
+  3)    printf "    请输入主机 IP/域名: "; read HOST ;;
+  *)    HOST="$HOST_INPUT" ;;
 esac
+
+printf "RPC 端口 (留空=默认 9091): "
+read PORT_INPUT
+[ -z "$PORT_INPUT" ] && PORT_INPUT="9091"
+
+RPC="http://${HOST}:${PORT_INPUT}/transmission/rpc"
 echo "  → 使用: $RPC"
 echo
 
