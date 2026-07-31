@@ -169,9 +169,11 @@ if [ "$CLIENT" = "tr" ] && [ -n "$TORRENTS_DIR" ]; then
   [ -d "$TR_RESUME_DIR" ] || TR_RESUME_DIR=""
 fi
 # qBittorrent 的进度目录: BT_backup(<hash>.fastresume)
+# 注意: hash 长度不固定(v1 种子=40位, v2 种子/混合=64位)，BT_backup 名字本身已足够独特，
+#       所以这里用 len=0 不校验 hex 长度，只要含 .fastresume 文件就认
 QB_RESUME_DIR=""
 if [ "$CLIENT" = "qb" ]; then
-  QB_RESUME_DIR=$(find_first_dir BT_backup fastresume 40)
+  QB_RESUME_DIR=$(find_first_dir BT_backup fastresume 0)
 fi
 
 # ============================================================
