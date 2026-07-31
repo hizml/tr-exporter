@@ -196,21 +196,33 @@ fi
 # ============================================================
 echo "===== Tracker 列表 (含种子数) ====="
 # 统计每个 tracker 域名下的种子数量，输出两列: "域名<TAB>数量"
-# Transmission: 一个种子可能有多个 tracker，此处按 announce 条数统计(多数场景够用)
-# qBittorrent: tracker 字段是单个字符串，直接按域名聚合
+# 空 tracker 的种子用占位标记 __NONE__ 单独统计并显示为 "(无 tracker)"
+# Transmission: 一个种子可能有多个 tracker，无任何 tracker 的种子计入 __NONE__
+# qBittorrent: tracker 字段为空字符串的种子计入 __NONE__
 if [ "$CLIENT" = "tr" ]; then
   curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
     -d '{"method":"torrent-get","arguments":{"fields":["trackers"]}}' \
-    | jq -r '[.arguments.torrents[].trackers[].announce | sub("^https?://"; "") | sub("/.*$"; "")] | group_by(.)[] | "\(.[0])\t\(length)"' 2>/dev/null
+    | jq -r '
+        [ .arguments.torrents[]
+          | (if (.trackers|length)==0 then "__NONE__"
+             else (.trackers[].announce | sub("^https?://"; "") | sub("/.*$"; "")) end)
+        ] | group_by(.)[] | "\(.[0])\t\(length)"
+      ' 2>/dev/null
 else
   curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
-    | jq -r '[.[].tracker | sub("^https?://"; "") | sub("/.*$"; "")] | group_by(.)[] | "\(.[0])\t\(length)"' 2>/dev/null
+    | jq -r '
+        [ .[]
+          | (.tracker | sub("^https?://"; "") | sub("/.*$"; "")
+             | if . == "" then "__NONE__" else . end)
+        ] | group_by(.)[] | "\(.[0])\t\(length)"
+      ' 2>/dev/null
 fi | sort -t"	" -k1 > /tmp/tr_list.txt
 
-# 显示列表: "  序号) 域名 (N 个种子)"
+# 显示列表: "  序号) 域名 (N 个种子)"，空 tracker 显示为 "(无 tracker)"
 i=1
 while IFS="	" read -r domain count; do
   [ -z "$domain" ] && continue
+  [ "$domain" = "__NONE__" ] && domain="(无 tracker)"
   printf "  %s) %s (%s 个)\n" "$i" "$domain" "$count"
   i=$((i+1))
 done < /tmp/tr_list.txt
@@ -230,7 +242,10 @@ while true; do
     echo "→ 全部导出"; break
   elif echo "$SEL" | grep -qE '^[0-9]+$'; then
     if [ "$SEL" -ge 1 ] && [ "$SEL" -le "$ALL_N" ]; then
-      KEY=$(sed -n "${SEL}p" /tmp/tr_list.txt | cut -f1); echo "→ 选择: $KEY"; break
+      KEY=$(sed -n "${SEL}p" /tmp/tr_list.txt | cut -f1)
+      if [ "$KEY" = "__NONE__" ]; then echo "→ 选择: (无 tracker)"
+      else echo "→ 选择: $KEY"; fi
+      break
     fi
     echo "  ⚠️ 序号超出范围 (1-$ALL_N)，请重新输入"
   elif [ -z "$SEL" ]; then
@@ -250,6 +265,9 @@ if [ "$CLIENT" = "qb" ]; then
   if [ -z "$KEY" ]; then
     SAMPLE_HASHES=$(curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
       | jq -r '.[0:5][].hash' 2>/dev/null)
+  elif [ "$KEY" = "__NONE__" ]; then
+    SAMPLE_HASHES=$(curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
+      | jq -r '[.[] | select(.tracker == "")][0:5][].hash' 2>/dev/null)
   else
     SAMPLE_HASHES=$(curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
       | jq -r --arg k "$KEY_LOWER" '[.[] | select((.tracker|ascii_downcase)|contains($k))][0:5][].hash' 2>/dev/null)
@@ -307,6 +325,9 @@ if [ "$CLIENT" = "tr" ]; then
   | jq -c '.arguments.torrents[]' | while read -r t; do
       MATCH=0
       if [ -z "$KEY" ]; then MATCH=1
+      elif [ "$KEY" = "__NONE__" ]; then
+        # 无 tracker 的种子: trackers 数组为空
+        [ "$(echo "$t" | jq -r '.trackers|length')" = "0" ] && MATCH=1
       elif echo "$t" | jq -r '.trackers[].announce' | grep -qiF "$KEY"; then MATCH=1; fi
       if [ "$MATCH" = "1" ]; then
         name=$(echo "$t" | jq -r '.name')
@@ -336,6 +357,9 @@ else
         tracker=$(echo "$t" | jq -r '.tracker')
         MATCH=0
         if [ -z "$KEY" ]; then MATCH=1
+        elif [ "$KEY" = "__NONE__" ]; then
+          # 无 tracker 的种子: tracker 字段为空
+          [ -z "$tracker" ] && MATCH=1
         elif echo "$tracker" | grep -qiF "$KEY"; then MATCH=1; fi
         if [ "$MATCH" = "1" ]; then
           dst="$OUT/torrents/${hash}.torrent"
