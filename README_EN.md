@@ -1,5 +1,8 @@
 # tr-exporter
 
+[![ShellCheck](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml)
+![version](https://img.shields.io/badge/version-1.4.0-blue)
+
 **[English](README_EN.md)** | [中文](README.md)
 
 An interactive shell script to batch-export `.torrent` files from **Transmission** or **qBittorrent**, filtered by tracker.
@@ -19,10 +22,15 @@ Neither Transmission nor qBittorrent's Web UI offers a one-click "export all tor
 ## Features
 
 - 🖥 **Fully interactive** — choose client, type host/port/credentials, pick a tracker; no need to edit the script
-- 🎯 **Filter by tracker** — lists existing trackers; select by number / keyword match / export all
+- ⚡ **Non-interactive mode** — CLI flags override any prompt; cron-friendly for scheduled backups
+- 🎯 **Filter by tracker** — lists existing trackers (**with counts**); select by number / keyword match / export all
+- 📈 **Incremental export** — `--incr` skips already-exported torrents; repeat backups are instant
 - 🔀 **Two clients** — Transmission **and** qBittorrent from a single entry point
+- 🌐 **i18n** — Chinese / English switch at start, or via `--lang zh|en`
 - 📦 **Auto zip** — exports are packed into a single zip so you download one file (avoids multi-select download losses)
+- 📄 **Export report** — auto-generates `report.txt` with time/client/tracker/counts for verification
 - 🔧 **Auto-installs deps** — `jq` / `zip` installed on the fly via Alpine `apk` or Debian `apt` when missing
+- 🔄 **Self-update** — `--update` checks and upgrades to the latest release
 - 🔒 **No hardcoded credentials** — everything is entered at runtime; the script itself is safe to publish
 
 ## Quick start

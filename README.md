@@ -1,5 +1,8 @@
 # tr-exporter
 
+[![ShellCheck](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml)
+![version](https://img.shields.io/badge/version-1.4.0-blue)
+
 [English](README_EN.md) | **中文**
 
 > **EN:** An interactive shell script to batch-export `.torrent` files from **Transmission** or **qBittorrent**, filtered by tracker. Designed for Docker clients on QNAP / Synology NAS — no SSH required.
@@ -21,11 +24,16 @@ Transmission / qBittorrent 自带界面都没有「按 Tracker 一键导出」�
 ## 特性
 
 - 🖥 **纯交互式**：选择客户端、输入地址/端口/认证、选 Tracker，不用改脚本
+- ⚡ **非交互模式**：命令行参数覆盖任意交互项，可写进 crontab 定时备份
 - 🔀 **双客户端**：一个入口同时支持 **Transmission** 和 **qBittorrent**
-- 🎯 **按 Tracker 筛选**：列出现有 Tracker，按序号选择 / 关键字匹配 / 全部导出
+- 🎯 **按 Tracker 筛选**：列出现有 Tracker（**含数量**），按序号选择 / 关键字匹配 / 全部导出
+- 📈 **增量导出**：`--incr` 跳过已导出的种子，重复备份秒级完成
+- 🌐 **中英文切换**：启动选语言，或 `--lang zh|en` 指定
 - 🔍 **智能定位种子目录**（Transmission）：自动跳过 `/kettu/templates/torrents` 等「假目录」，只认含 40 位 hex 种子文件的真实目录
 - 📦 **自动打包 zip**：导出后压成单个 zip，用文件管理器下载一个文件即可，避免多选下载漏文件
+- 📄 **导出报告**：自动生成 `report.txt`，含时间/客户端/Tracker/数量，方便核对
 - 🔧 **自动装依赖**：缺少 `jq` / `zip` 时自动尝试安装（Alpine `apk` / Debian `apt`）
+- 🔄 **自更新**：`--update` 检查并升级到最新版本
 - 🔒 **无硬编码凭据**：所有地址、账号、密码运行时输入，脚本本身可安全公开
 
 ## 快速开始
