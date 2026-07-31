@@ -112,9 +112,10 @@ sh /tmp/export.sh
 |------|------|
 | 序号，如 `1` | 选列表里第 1 个 Tracker |
 | 关键字，如 `soulvoice` | 大小写不敏感的模糊匹配 |
-| **留空回车** | **导出全部种子（不限 Tracker）** |
+| `a` | **导出全部种子（不限 Tracker）** |
 
-> 💡 想把客户端里所有种子一次性导出？Tracker 选择那一步**直接回车**即可，会导出全部。
+> 💡 想把客户端里所有种子一次性导出？Tracker 选择那一步输入 `a` 即可。
+> 💡 同一站点的多个域名（如 `pttime.org` 和 `pttime.online`）用关键字 `pttime` 可一次性命中。
 
 ## 同时导出进度（用于迁移）
 
@@ -133,6 +134,55 @@ export_xxxxxx/
 ```
 
 > ⚠️ 进度文件**不可跨客户端**使用（Tr 的 resume 不能给 qB 用，反之亦然）。跨客户端迁移时，需要用目标客户端「加载种子 + 相同数据路径 + 校验」的方式接续。
+
+## 命令行参数（非交互模式）
+
+默认是交互式；任何一项都能用命令行参数指定，**指定后跳过对应交互**（混合模式）：
+
+```sh
+sh export-torrents.sh [OPTIONS]
+
+  --lang zh|en        语言（zh=中文，en=英文）
+  --client tr|qb      客户端：tr=Transmission，qb=qBittorrent
+  --host HOST         主机（如 127.0.0.1）
+  --port PORT         端口（默认 tr=9091，qb=8080）
+  --user USER:PASS    认证（账号:密码）
+  --tracker KEY       Tracker 关键字，'a'=全部，'__NONE__'=无 tracker 的种子
+  --resume            同时导出进度文件
+  --no-resume         跳过进度文件（默认）
+  --incr              增量导出：跳过输出目录里已存在的种子
+  --out DIR           输出目录
+  --update            检查并更新脚本到最新版本
+  --help              显示帮助
+```
+
+**示例——全自动备份某站点种子（可写进 crontab 定时执行）**：
+
+```sh
+sh export-torrents.sh --lang zh --client tr --host 127.0.0.1 --port 9091 \
+                     --user qnap:qnap --tracker soulvoice --resume --incr \
+                     --out /config/backup_soulvoice
+```
+
+## 增量导出
+
+加 `--incr` 后，重新运行会**跳过输出目录里已经存在的种子**，只导新增的：
+
+```
+===== 完成 =====
+种子数量: 3 个
+跳过已导出: 93 个        ← 第二次运行，只导了 3 个新的
+```
+
+适合配合固定 `--out` 目录做**定期增量备份**。
+
+## 自更新
+
+```sh
+sh export-torrents.sh --update
+```
+
+会检查 GitHub 最新版本，有新版时自动覆盖升级（原文件备份为 `.bak`），已是最新则提示。
 
 ## 两种客户端的导出原理
 

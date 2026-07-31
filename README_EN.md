@@ -105,9 +105,10 @@ Use the NAS file manager (QNAP FileStation, etc.) to open the mapped `/config` f
 |------|------|
 | A number, e.g. `1` | Select the 1st tracker in the list |
 | A keyword, e.g. `soulvoice` | Case-insensitive fuzzy match |
-| **Empty (Enter)** | **Export every torrent (all trackers)** |
+| `a` | **Export every torrent (all trackers)** |
 
-> 💡 Want to export all torrents at once? Just press **Enter** at the tracker prompt.
+> 💡 Want to export all torrents at once? Enter `a` at the tracker prompt.
+> 💡 Multiple domains of the same site (e.g. `pttime.org` and `pttime.online`) can be matched at once with the keyword `pttime`.
 
 ## Exporting progress (for migration)
 
@@ -126,6 +127,55 @@ export_xxxxxx/
 ```
 
 > ⚠️ Progress files are **NOT portable across clients** (Tr's resume can't be used by qB, and vice versa). For cross-client migration, use the target client's "load torrent + same data path + recheck" flow.
+
+## Command-line options (non-interactive mode)
+
+Interactive by default; any prompt can be supplied via a flag, which **skips that prompt** (hybrid mode):
+
+```sh
+sh export-torrents.sh [OPTIONS]
+
+  --lang zh|en        Language (zh=Chinese, en=English)
+  --client tr|qb      Client: tr=Transmission, qb=qBittorrent
+  --host HOST         Web host (e.g. 127.0.0.1)
+  --port PORT         Web port (default tr=9091, qb=8080)
+  --user USER:PASS    Auth credentials (user:password)
+  --tracker KEY       Tracker keyword, 'a' for all, '__NONE__' for no-tracker
+  --resume            Also export progress files
+  --no-resume         Skip progress files (default)
+  --incr              Incremental: skip already-exported torrents
+  --out DIR           Output directory
+  --update            Update the script to the latest release
+  --help              Show help
+```
+
+**Example — fully automated backup of one site's torrents (cron-friendly):**
+
+```sh
+sh export-torrents.sh --lang en --client tr --host 127.0.0.1 --port 9091 \
+                     --user qnap:qnap --tracker soulvoice --resume --incr \
+                     --out /config/backup_soulvoice
+```
+
+## Incremental export
+
+With `--incr`, re-running **skips torrents already present** in the output dir, exporting only new ones:
+
+```
+===== Done =====
+Torrents: 3
+Skipped (already exported): 93      ← second run, only 3 new ones
+```
+
+Great for **periodic incremental backups** with a fixed `--out` directory.
+
+## Self-update
+
+```sh
+sh export-torrents.sh --update
+```
+
+Checks GitHub for the latest version; auto-upgrades (backing up the original as `.bak`) when newer, or confirms you're up to date.
 
 ## How export works per client
 

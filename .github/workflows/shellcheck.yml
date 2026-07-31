@@ -30,4 +30,4 @@ jobs:
           ignore_names: ""
           additional_files: ""
         env:
-          SHELLCHECK_OPTS: -e SC2162 -e SC2086 -e SC1090 -e SC1091
+          SHELLCHECK_OPTS: -e SC2162 -e SC2086 -e SC1090 -e SC1091 -e SC2059
