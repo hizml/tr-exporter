@@ -1,13 +1,20 @@
-# tr-exporter
+# torrent-toolkit
 
-[![ShellCheck](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml)
+[![ShellCheck](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml)
 ![version](https://img.shields.io/badge/version-1.4.0-blue)
 
 **[English](README_EN.md)** | [中文](README.md)
 
-An interactive shell script to batch-export `.torrent` files from **Transmission** or **qBittorrent**, filtered by tracker.
+A shell toolkit to batch **export / import** `.torrent` files for **Transmission** or **qBittorrent**, filtered by tracker.
 
 Perfect for **Docker-based clients running on QNAP / Synology NAS** — no SSH required. Just open the container's built-in **Terminal / Exec** panel and run the script.
+
+## Tools overview
+
+| Script | Purpose | Status |
+|--------|---------|--------|
+| `export-torrents.sh` | Batch **export** torrents by tracker (with progress, incremental, report) | ✅ Available |
+| `import-torrents.sh` | Batch **import** torrents into a client (resume-aware migration) | 🔨 Planned |
 
 ## What problem does it solve?
 
@@ -46,7 +53,7 @@ There are two ways to run the script in the container terminal:
 **Option A (recommended): fetch & run in one line from GitHub** — easiest when switching devices/containers; always the latest version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hizml/tr-exporter/main/export-torrents.sh -o /tmp/export.sh && sh /tmp/export.sh
+curl -fsSL https://raw.githubusercontent.com/hizml/torrent-toolkit/main/export-torrents.sh -o /tmp/export.sh && sh /tmp/export.sh
 ```
 
 > Requires outbound internet access to GitHub. QNAP Docker works out of the box.

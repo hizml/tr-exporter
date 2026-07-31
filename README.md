@@ -1,15 +1,22 @@
-# tr-exporter
+# torrent-toolkit
 
-[![ShellCheck](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/tr-exporter/actions/workflows/shellcheck.yml)
+[![ShellCheck](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml)
 ![version](https://img.shields.io/badge/version-1.4.0-blue)
 
 [English](README_EN.md) | **中文**
 
-> **EN:** An interactive shell script to batch-export `.torrent` files from **Transmission** or **qBittorrent**, filtered by tracker. Designed for Docker clients on QNAP / Synology NAS — no SSH required.
+> **EN:** A shell toolkit to batch **export / import** `.torrent` files for **Transmission** or **qBittorrent**, filtered by tracker. Designed for Docker clients on QNAP / Synology NAS — no SSH required.
 
-按 Tracker 批量导出 **Transmission / qBittorrent** 的 `.torrent` 种子文件的交互式脚本。
+Transmission / qBittorrent 的种子管理工具集——批量**导入 / 导出** `.torrent` 文件，支持按 Tracker 筛选。
 
 特别适合 **QNAP / 群晖等 NAS 上的 Docker 版客户端**——无需 SSH，只需在 Container Station / 容器管理器的「终端」里运行即可。
+
+## 工具一览
+
+| 脚本 | 功能 | 状态 |
+|------|------|------|
+| `export-torrents.sh` | 按 Tracker 批量**导出**种子（含进度文件、增量、报告） | ✅ 可用 |
+| `import-torrents.sh` | 批量**导入**种子到客户端（接续进度迁移） | 🔨 规划中 |
 
 ## 解决什么问题
 
@@ -49,7 +56,7 @@ Transmission / qBittorrent 自带界面都没有「按 Tracker 一键导出」�
 **方式 A（推荐）：一行命令从 GitHub 拉取并运行** —— 换设备/换容器时最省事，永远用最新版：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hizml/tr-exporter/main/export-torrents.sh -o /tmp/export.sh && sh /tmp/export.sh
+curl -fsSL https://raw.githubusercontent.com/hizml/torrent-toolkit/main/export-torrents.sh -o /tmp/export.sh && sh /tmp/export.sh
 ```
 
 > 前提：容器能访问外网（GitHub）。QNAP Docker 默认即可。

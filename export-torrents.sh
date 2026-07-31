@@ -4,8 +4,8 @@
 # 适用：Docker / QNAP Container Station 终端等无 SSH 场景，或任意能访问 Web API 的环境。
 
 VERSION="1.4.0"
-REPO_RAW="https://raw.githubusercontent.com/hizml/tr-exporter/main/export-torrents.sh"
-REPO_API="https://api.github.com/repos/hizml/tr-exporter/releases/latest"
+REPO_RAW="https://raw.githubusercontent.com/hizml/torrent-toolkit/main/export-torrents.sh"
+REPO_API="https://api.github.com/repos/hizml/torrent-toolkit/releases/latest"
 
 # ============================================================
 # i18n: 把所有提示文案抽成变量，开头选语言后全程使用该语言
