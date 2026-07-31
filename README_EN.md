@@ -33,7 +33,17 @@ In your NAS container manager (QNAP Container Station / Container Manager, Synol
 
 ### 2. Write the script into the container and run it
 
-Because it's an interactive script (it uses `read`), **don't paste it directly into the terminal** — `read` would swallow the pasted text as input. Use a heredoc to write it to a file first, then execute:
+There are two ways to run the script in the container terminal:
+
+**Option A (recommended): fetch & run in one line from GitHub** — easiest when switching devices/containers; always the latest version:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hizml/tr-exporter/main/export-torrents.sh -o /tmp/export.sh && sh /tmp/export.sh
+```
+
+> Requires outbound internet access to GitHub. QNAP Docker works out of the box.
+
+**Option B (offline / air-gapped): paste the script manually** — because it's an interactive script (it uses `read`), **don't paste it directly into the terminal** (read would swallow the pasted text as input). Use a heredoc to write it to a file first, then execute:
 
 ```sh
 cat > /tmp/export.sh <<'EOF'
@@ -155,6 +165,24 @@ A: Usually wrong host/port/credentials. Check whether Authentication is enabled 
 - Exports the raw `.torrent` file by default; **progress files are optional** (see "Exporting progress" above).
 - Progress files are **NOT portable across clients**; for cross-client migration, use the target client's "load torrent + same data path + recheck" flow.
 - This project ships with automated [ShellCheck](https://www.shellcheck.net/) via GitHub Actions, but the script is not tested on every client version — validate on a small batch first.
+
+## Switching devices / migration
+
+The script is **device-agnostic** — as long as it's Transmission or qBittorrent, any terminal-capable environment (NAS Docker, VPS, bare-metal Linux/Mac) works. No edits to the script are needed; just answer the prompts according to the new device:
+
+| Scenario | What to enter |
+|----------|---------------|
+| Running inside the **container** terminal | host = `127.0.0.1` (Enter for default) |
+| From the **host or another machine** | choose `3` and enter the container's IP |
+| Non-default port | enter the actual port at the port prompt |
+| Different credentials | enter them at the auth prompt |
+| Non-standard directory layout | the script auto-detects; prompts for manual input if not found |
+
+The easiest way on a new device is **Option A (curl one-liner)** above, which always runs the latest version.
+
+> ⚠️ Two minor gotchas you may need to handle manually:
+> - **Container has no `/config` mount**: exports land in the current dir `./export_xxx`. `cd` into a mounted folder before running.
+> - **Progress dir not found**: after answering `y` to the progress prompt, paste the path manually (e.g. for qB `/Download/qBittorrent/.local/share/qBittorrent/BT_backup`).
 
 ## License
 

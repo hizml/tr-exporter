@@ -36,7 +36,17 @@ Transmission / qBittorrent 自带界面都没有「按 Tracker 一键导出」�
 
 ### 2. 把脚本写进容器并运行
 
-因为是交互式脚本（含 `read` 输入），**不能直接整段粘贴到终端**——`read` 会把后续粘贴内容当成输入。推荐用 heredoc 写入文件再执行：
+在容器终端里运行脚本有两种方式：
+
+**方式 A（推荐）：一行命令从 GitHub 拉取并运行** —— 换设备/换容器时最省事，永远用最新版：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hizml/tr-exporter/main/export-torrents.sh -o /tmp/export.sh && sh /tmp/export.sh
+```
+
+> 前提：容器能访问外网（GitHub）。QNAP Docker 默认即可。
+
+**方式 B（离线/内网）：手动粘贴脚本内容** —— 因为是交互式脚本（含 `read` 输入），**不能直接整段粘贴到终端**（`read` 会把后续粘贴内容当成输入）。用 heredoc 写入文件再执行：
 
 ```sh
 cat > /tmp/export.sh <<'EOF'
@@ -162,6 +172,24 @@ A：多半是 RPC 地址、账号或密码不对。确认 Transmission 设置 �
 - 默认仅导出 `.torrent` 种子文件；**进度文件可选导出**（见上方「同时导出进度」）。
 - 进度文件**不可跨客户端**使用；跨客户端迁移时，需用目标客户端「加载种子 + 相同数据路径 + 校验」的方式接续。
 - 本项目自带 [ShellCheck](https://www.shellcheck.net/) 自动检查（GitHub Actions），但脚本未在所有客户端版本上实测，建议先小范围验证。
+
+## 换设备 / 迁移使用
+
+脚本本身**不绑定任何设备**——只要是 Transmission 或 qBittorrent，任何能开终端的环境（NAS Docker、VPS、裸机 Linux/Mac）都能直接用，脚本一个字都不用改，只需在交互时按新设备的实际情况填：
+
+| 场景 | 交互时怎么填 |
+|------|-------------|
+| 在**容器内部**终端运行 | 主机填 `127.0.0.1`（回车默认） |
+| 在**宿主机或别的机器**连容器 | 主机选 `3` 填容器实际 IP |
+| 端口被改过 | 端口那步输实际端口 |
+| 账号密码不同 | 认证那步填新的 |
+| 目录非标准布局 | 脚本自动查找；找不到会提示手动输入 |
+
+换设备最省事的方式是用上面的 **方式 A（curl 一键拉取）**，永远跑最新版。
+
+> ⚠️ 两个可能需要手动处理的小坑：
+> - **容器没挂载 `/config`**：导出会落到当前目录 `./export_xxx`。可先 `cd` 到有挂载的目录再跑。
+> - **进度目录找不到**：进度那步输 `y` 后按提示手动粘路径（如 qB 的 `/Download/qBittorrent/.local/share/qBittorrent/BT_backup`）。
 
 ## License
 
