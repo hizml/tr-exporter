@@ -41,6 +41,9 @@ set_lang() {
       T_SAVE_TITLE="Save path"; T_SAVE_PROMPT="Download/save dir (empty=client default): "
       T_SAVE_USE="  -> save path:"; T_SAVE_DEFAULT="  -> use client default"
       T_PATHS_FOUND="  -> paths.json found:"
+      T_PATHS_OVERRIDE="  -> your input overrides paths.json records:"
+      T_PATHS_RESTORE="  -> will auto-restore each torrent to its original path:"
+      T_PATHS_UNIT="records"
       T_IMPORTING="Importing..."; T_OK="[OK]  "; T_FAIL="[FAIL]"
       T_DUP="[DUP] "; T_NO_RESUME=" [no-resume]"; T_RESUME_TAG=" +resume"
       T_DONE="===== Done ====="; T_IMPORT_OK="Imported: %s"
@@ -85,6 +88,9 @@ set_lang() {
       T_SAVE_TITLE="保存路径"; T_SAVE_PROMPT="下载/保存目录 (留空=客户端默认): "
       T_SAVE_USE="  → 保存路径:"; T_SAVE_DEFAULT="  → 用客户端默认"
       T_PATHS_FOUND="  → 发现 paths.json:"
+      T_PATHS_OVERRIDE="  → 你输入的路径会覆盖 paths.json 记录，共"
+      T_PATHS_RESTORE="  → 将按 paths.json 自动恢复每个种子的原路径，共"
+      T_PATHS_UNIT="条"
       T_IMPORTING="正在导入..."; T_OK="[OK]  "; T_FAIL="[FAIL]"
       T_DUP="[DUP] "; T_NO_RESUME=" [no-resume]"; T_RESUME_TAG=" +resume"
       T_DONE="===== 完成 ====="; T_IMPORT_OK="导入成功: %s 个"
@@ -470,7 +476,13 @@ PATHS_JSON=$(dirname "$SRC")/paths.json
 if [ -f "$PATHS_JSON" ]; then
   echo "$T_PATHS_FOUND $PATHS_JSON"
   PATHS_COUNT=$(jq 'length' "$PATHS_JSON" 2>/dev/null)
-  echo "  → $PATHS_COUNT 条路径记录（优先于上面的保存路径）"
+  if [ -n "$SAVE_PATH" ]; then
+    # 用户输入了路径: 提示会覆盖 paths.json
+    printf "%s %s %s\n" "$T_PATHS_OVERRIDE" "$PATHS_COUNT" "$T_PATHS_UNIT"
+  else
+    # 用户没输: 提示用 paths.json 自动恢复
+    printf "%s %s %s\n" "$T_PATHS_RESTORE" "$PATHS_COUNT" "$T_PATHS_UNIT"
+  fi
 else
   PATHS_JSON=""
 fi
@@ -500,12 +512,11 @@ for _f in "$SRC"/*.torrent; do
     printf "%s %s\n" "$T_DUP" "$_hash"; echo "$_hash" >> "$STAT_DUP"; continue
   fi
 
-  # 解析保存路径: paths.json 优先(每个种子各自的原路径)，其次全局 SAVE_PATH
-  _save=""
-  if [ -n "$PATHS_JSON" ]; then
+  # 解析保存路径(优先级): 1.用户输入的 --save-path  2.paths.json 记录  3.客户端默认
+  _save="$SAVE_PATH"
+  if [ -z "$_save" ] && [ -n "$PATHS_JSON" ]; then
     _save=$(jq -r --arg h "$_hash" '.[$h] // empty' "$PATHS_JSON" 2>/dev/null)
   fi
-  [ -z "$_save" ] && _save="$SAVE_PATH"
 
   if [ "$CLIENT" = "tr" ]; then
     # Transmission: torrent-add 用 filename 本地路径

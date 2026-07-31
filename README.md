@@ -262,11 +262,12 @@ sh import-torrents.sh --lang zh --client tr --host 127.0.0.1 --port 9091 \
 ```
 
 **路径优先级**（导入时）：
-1. `paths.json` 里该种子的记录（最优先）
-2. `--save-path` 指定的全局路径
+1. `--save-path` 指定的路径（**用户输入优先**，会覆盖 paths.json）
+2. `paths.json` 里该种子的记录（用户没输入时，自动按原路径恢复）
 3. 客户端默认路径
 
-> 💡 完整迁移流程：先在旧客户端 `export-torrents.sh`（会带出 paths.json），再到新客户端 `import-torrents.sh`，路径自动还原。`--save-path` 只对 paths.json 里没有的种子兜底。
+> 💡 完整迁移流程：先在旧客户端 `export-torrents.sh`（会带出 paths.json），再到新客户端 `import-torrents.sh`，路径自动还原。
+> 💡 如果你**留空保存路径**，导入时会用 paths.json 自动恢复；如果你**填了路径**，会统一用你填的（适合迁移时想统一换目录的场景）。
 
 ## 进度接续说明
 

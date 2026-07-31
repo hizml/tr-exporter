@@ -255,11 +255,12 @@ Import: reads paths.json
 ```
 
 **Path priority** (on import):
-1. The torrent's entry in `paths.json` (highest)
-2. The global `--save-path`
+1. `--save-path` you enter (**user input wins**, overrides paths.json)
+2. The torrent's entry in `paths.json` (auto-restore to original path when you leave it empty)
 3. Client default
 
-> 💡 Full migration flow: run `export-torrents.sh` on the old client (which emits paths.json), then `import-torrents.sh` on the new client — paths are restored automatically. `--save-path` only acts as a fallback for torrents not in paths.json.
+> 💡 Full migration flow: run `export-torrents.sh` on the old client (which emits paths.json), then `import-torrents.sh` on the new client — paths are restored automatically.
+> 💡 If you **leave save-path empty**, import uses paths.json to auto-restore; if you **enter a path**, all torrents use that path (useful when consolidating to a new dir during migration).
 
 ## Progress restoration notes
 
