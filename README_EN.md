@@ -1,7 +1,7 @@
 # torrent-toolkit
 
 [![ShellCheck](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml)
-![version](https://img.shields.io/badge/version-1.4.0-blue)
+![version](https://img.shields.io/badge/version-1.5.0-blue)
 
 **[English](README_EN.md)** | [中文](README.md)
 
@@ -138,7 +138,8 @@ Resulting directory layout:
 ```
 export_xxxxxx/
 ├── torrents/    ← .torrent files
-└── resume/      ← progress files (only when progress export is chosen)
+├── resume/      ← progress files (only when progress export is chosen)
+└── paths.json   ← each torrent's original download path (for import auto-restore)
 ```
 
 > ⚠️ Progress files are **NOT portable across clients** (Tr's resume can't be used by qB, and vice versa). For cross-client migration, use the target client's "load torrent + same data path + recheck" flow.
@@ -239,6 +240,26 @@ sh import-torrents.sh --lang en --client tr --host 127.0.0.1 --port 9091 \
                      --user qnap:qnap --src /config/export_20260731_000710 \
                      --resume --save-path /Download
 ```
+
+## Save-path auto-restore (paths.json)
+
+Torrents may be scattered across different dirs (e.g. `/Download`, `/Movies`). The export script auto-generates `paths.json` recording each torrent's original download path; the import script reads it and **restores each torrent to its original path** — no manual batching needed.
+
+```
+Export: auto-generates export_xxx/paths.json
+        {"abc123": "/Download", "xyz456": "/Movies", ...}
+
+Import: reads paths.json
+        torrent abc123 -> restored to /Download
+        torrent xyz456 -> restored to /Movies
+```
+
+**Path priority** (on import):
+1. The torrent's entry in `paths.json` (highest)
+2. The global `--save-path`
+3. Client default
+
+> 💡 Full migration flow: run `export-torrents.sh` on the old client (which emits paths.json), then `import-torrents.sh` on the new client — paths are restored automatically. `--save-path` only acts as a fallback for torrents not in paths.json.
 
 ## Progress restoration notes
 

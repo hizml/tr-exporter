@@ -3,7 +3,7 @@
 # 交互式 + 非交互式(命令行参数)；支持增量导出、进度导出、导出小结报告、中英文切换。
 # 适用：Docker / QNAP Container Station 终端等无 SSH 场景，或任意能访问 Web API 的环境。
 
-VERSION="1.4.0"
+VERSION="1.5.0"
 REPO_RAW="https://raw.githubusercontent.com/hizml/torrent-toolkit/main/export-torrents.sh"
 REPO_API="https://api.github.com/repos/hizml/torrent-toolkit/releases/latest"
 
@@ -603,8 +603,10 @@ export AUTH SID RPC API BASE COOKIE CLIENT KEY OUT TORRENTS_DIR EXPORT_RESUME P_
 # 统计变量(通过临时文件累计，子 shell 里无法直接改父变量)
 STAT_OK="/tmp/tr_stat_ok_$$"; STAT_MISS="/tmp/tr_stat_miss_$$"; STAT_FAIL="/tmp/tr_stat_fail_$$"
 STAT_SKIP="/tmp/tr_stat_skip_$$"; STAT_RSUME="/tmp/tr_stat_rsume_$$"
+PATHS_TMP="/tmp/tr_paths_$$"
 : > "$STAT_OK"; : > "$STAT_MISS"; : > "$STAT_FAIL"; : > "$STAT_SKIP"; : > "$STAT_RSUME"
-export STAT_OK STAT_MISS STAT_FAIL STAT_SKIP STAT_RSUME
+: > "$PATHS_TMP"
+export STAT_OK STAT_MISS STAT_FAIL STAT_SKIP STAT_RSUME PATHS_TMP
 export T_OK T_MISS T_FAIL T_RESUME_TAG T_NO_RESUME T_SKIP_TAG
 
 incr_exists() {
@@ -615,7 +617,7 @@ incr_exists() {
 
 if [ "$CLIENT" = "tr" ]; then
   curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
-    -d '{"method":"torrent-get","arguments":{"fields":["name","hashString","trackers"]}}' \
+    -d '{"method":"torrent-get","arguments":{"fields":["name","hashString","trackers","downloadDir"]}}' \
   | jq -c '.arguments.torrents[]' | while read -r t; do
       MATCH=0
       if [ -z "$KEY" ]; then MATCH=1
@@ -625,11 +627,14 @@ if [ "$CLIENT" = "tr" ]; then
       if [ "$MATCH" = "1" ]; then
         name=$(echo "$t" | jq -r '.name')
         hash=$(echo "$t" | jq -r '.hashString')
+        ddir=$(echo "$t" | jq -r '.downloadDir // empty')
         # 增量跳过
         if incr_exists "$hash"; then echo "$hash" >> "$STAT_SKIP"; continue; fi
         src="$TORRENTS_DIR/$hash.torrent"
         if [ -f "$src" ]; then
           cp "$src" "$OUT/torrents/${hash}.torrent"
+          # 记录原路径(用于导入时恢复)
+          [ -n "$ddir" ] && printf '%s\t%s\n' "$hash" "$ddir" >> "$PATHS_TMP"
           rlog=""
           if [ "$EXPORT_RESUME" != "n" ]; then
             rsrc="$EXPORT_RESUME/$hash.resume"
@@ -648,6 +653,7 @@ else
         name=$(echo "$t" | jq -r '.name')
         hash=$(echo "$t" | jq -r '.hash')
         tracker=$(echo "$t" | jq -r '.tracker')
+        spath=$(echo "$t" | jq -r '.save_path // empty')
         MATCH=0
         if [ -z "$KEY" ]; then MATCH=1
         elif [ "$KEY" = "__NONE__" ]; then
@@ -659,6 +665,8 @@ else
           http=$(curl -s -b "$COOKIE" -H "Referer: $BASE" -o "$dst" -w "%{http_code}" \
             "$API/torrents/export?hash=$hash")
           if [ "$http" = "200" ] && [ -s "$dst" ] && head -c1 "$dst" | grep -q 'd'; then
+            # 记录原路径(用于导入时恢复)
+            [ -n "$spath" ] && printf '%s\t%s\n' "$hash" "$spath" >> "$PATHS_TMP"
             rlog=""
             if [ "$EXPORT_RESUME" != "n" ]; then
               rsrc="$EXPORT_RESUME/$hash.fastresume"
@@ -676,7 +684,13 @@ fi
 
 N_OK=$(wc -l < "$STAT_OK"); N_MISS=$(wc -l < "$STAT_MISS"); N_FAIL=$(wc -l < "$STAT_FAIL")
 N_SKIP=$(wc -l < "$STAT_SKIP"); N_RSUME=$(wc -l < "$STAT_RSUME")
-rm -f "$STAT_OK" "$STAT_MISS" "$STAT_FAIL" "$STAT_SKIP" "$STAT_RSUME"
+
+# 生成 paths.json (记录每个种子原始下载路径，供导入脚本恢复)
+if [ -s "$PATHS_TMP" ]; then
+  # tab 分隔的 hash<TAB>path 转成 JSON 对象
+  jq -Rn '[inputs | split("\t") | {(.[0]): .[1]}] | add' "$PATHS_TMP" > "$OUT/paths.json" 2>/dev/null
+fi
+rm -f "$STAT_OK" "$STAT_MISS" "$STAT_FAIL" "$STAT_SKIP" "$STAT_RSUME" "$PATHS_TMP"
 
 # ============================================================
 # 11. 完成 + 小结报告

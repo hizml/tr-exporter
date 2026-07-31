@@ -40,6 +40,7 @@ set_lang() {
       T_RESUME_TR_DIR="  Tr resume dir:"; T_RESUME_QB_DIR="  qB BT_backup dir:"
       T_SAVE_TITLE="Save path"; T_SAVE_PROMPT="Download/save dir (empty=client default): "
       T_SAVE_USE="  -> save path:"; T_SAVE_DEFAULT="  -> use client default"
+      T_PATHS_FOUND="  -> paths.json found:"
       T_IMPORTING="Importing..."; T_OK="[OK]  "; T_FAIL="[FAIL]"
       T_DUP="[DUP] "; T_NO_RESUME=" [no-resume]"; T_RESUME_TAG=" +resume"
       T_DONE="===== Done ====="; T_IMPORT_OK="Imported: %s"
@@ -83,6 +84,7 @@ set_lang() {
       T_RESUME_TR_DIR="  Tr resume 目录:"; T_RESUME_QB_DIR="  qB BT_backup 目录:"
       T_SAVE_TITLE="保存路径"; T_SAVE_PROMPT="下载/保存目录 (留空=客户端默认): "
       T_SAVE_USE="  → 保存路径:"; T_SAVE_DEFAULT="  → 用客户端默认"
+      T_PATHS_FOUND="  → 发现 paths.json:"
       T_IMPORTING="正在导入..."; T_OK="[OK]  "; T_FAIL="[FAIL]"
       T_DUP="[DUP] "; T_NO_RESUME=" [no-resume]"; T_RESUME_TAG=" +resume"
       T_DONE="===== 完成 ====="; T_IMPORT_OK="导入成功: %s 个"
@@ -462,6 +464,16 @@ else
 fi
 if [ -n "$SAVE_PATH" ]; then echo "$T_SAVE_USE $SAVE_PATH"
 else echo "$T_SAVE_DEFAULT"; fi
+
+# 加载 paths.json (导出脚本生成，记录每个种子原始下载路径)
+PATHS_JSON=$(dirname "$SRC")/paths.json
+if [ -f "$PATHS_JSON" ]; then
+  echo "$T_PATHS_FOUND $PATHS_JSON"
+  PATHS_COUNT=$(jq 'length' "$PATHS_JSON" 2>/dev/null)
+  echo "  → $PATHS_COUNT 条路径记录（优先于上面的保存路径）"
+else
+  PATHS_JSON=""
+fi
 echo
 
 # ============================================================
@@ -473,7 +485,7 @@ STAT_OK="/tmp/tr_stat_ok_$$"; STAT_FAIL="/tmp/tr_stat_fail_$$"
 STAT_DUP="/tmp/tr_stat_dup_$$"; STAT_RSUME="/tmp/tr_stat_rsume_$$"
 : > "$STAT_OK"; : > "$STAT_FAIL"; : > "$STAT_DUP"; : > "$STAT_RSUME"
 export T_OK T_FAIL T_DUP T_NO_RESUME T_RESUME_TAG STAT_OK STAT_FAIL STAT_DUP STAT_RSUME
-export P_SKIPDUP EXIST_HASHES CLIENT_RESUME_DIR RESUME_SRC P_RESUME P_SAVE
+export P_SKIPDUP EXIST_HASHES CLIENT_RESUME_DIR RESUME_SRC P_RESUME P_SAVE PATHS_JSON
 export AUTH SID RPC API BASE COOKIE CLIENT SAVE_PATH
 
 # 把保存路径转成 jq 可用的转义字符串(处理路径中的特殊字符和反斜杠)
@@ -488,10 +500,17 @@ for _f in "$SRC"/*.torrent; do
     printf "%s %s\n" "$T_DUP" "$_hash"; echo "$_hash" >> "$STAT_DUP"; continue
   fi
 
+  # 解析保存路径: paths.json 优先(每个种子各自的原路径)，其次全局 SAVE_PATH
+  _save=""
+  if [ -n "$PATHS_JSON" ]; then
+    _save=$(jq -r --arg h "$_hash" '.[$h] // empty' "$PATHS_JSON" 2>/dev/null)
+  fi
+  [ -z "$_save" ] && _save="$SAVE_PATH"
+
   if [ "$CLIENT" = "tr" ]; then
     # Transmission: torrent-add 用 filename 本地路径
-    if [ -n "$SAVE_PATH" ]; then
-      _dd=$(esc_json "$SAVE_PATH")
+    if [ -n "$_save" ]; then
+      _dd=$(esc_json "$_save")
       _body=$(curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
         -d "{\"method\":\"torrent-add\",\"arguments\":{\"filename\":\"$(esc_json "$_f")\",\"download-dir\":\"$_dd\",\"paused\":false}}")
     else
@@ -508,9 +527,9 @@ for _f in "$SRC"/*.torrent; do
     fi
   else
     # qBittorrent: torrents/add multipart 上传
-    if [ -n "$SAVE_PATH" ]; then
+    if [ -n "$_save" ]; then
       _resp=$(curl -s -b "$COOKIE" -H "Referer: $BASE" \
-        -F "torrents=@$_f" -F "savepath=$SAVE_PATH" -F "paused=false" \
+        -F "torrents=@$_f" -F "savepath=$_save" -F "paused=false" \
         "$API/torrents/add")
     else
       _resp=$(curl -s -b "$COOKIE" -H "Referer: $BASE" \

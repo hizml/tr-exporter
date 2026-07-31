@@ -1,7 +1,7 @@
 # torrent-toolkit
 
 [![ShellCheck](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/hizml/torrent-toolkit/actions/workflows/shellcheck.yml)
-![version](https://img.shields.io/badge/version-1.4.0-blue)
+![version](https://img.shields.io/badge/version-1.5.0-blue)
 
 [English](README_EN.md) | **中文**
 
@@ -145,7 +145,8 @@ sh /tmp/export.sh
 ```
 export_xxxxxx/
 ├── torrents/    ← .torrent 种子文件
-└── resume/      ← 进度文件（仅当选择导出进度时）
+├── resume/      ← 进度文件（仅当选择导出进度时）
+└── paths.json   ← 每个种子的原始下载路径（供导入时自动恢复）
 ```
 
 > ⚠️ 进度文件**不可跨客户端**使用（Tr 的 resume 不能给 qB 用，反之亦然）。跨客户端迁移时，需要用目标客户端「加载种子 + 相同数据路径 + 校验」的方式接续。
@@ -246,6 +247,26 @@ sh import-torrents.sh --lang zh --client tr --host 127.0.0.1 --port 9091 \
                      --user qnap:qnap --src /config/export_20260731_000710 \
                      --resume --save-path /Download
 ```
+
+## 保存路径自动恢复 (paths.json)
+
+种子可能分散在不同目录（如 `/Download`、`/Movies`）。导出脚本会自动生成 `paths.json` 记录每个种子的原始下载路径，导入脚本读取后会**按各自原路径恢复**，无需手动分批。
+
+```
+导出时: 自动生成 export_xxx/paths.json
+        {"abc123": "/Download", "xyz456": "/Movies", ...}
+
+导入时: 自动读取 paths.json
+        种子 abc123 → 恢复到 /Download
+        种子 xyz456 → 恢复到 /Movies
+```
+
+**路径优先级**（导入时）：
+1. `paths.json` 里该种子的记录（最优先）
+2. `--save-path` 指定的全局路径
+3. 客户端默认路径
+
+> 💡 完整迁移流程：先在旧客户端 `export-torrents.sh`（会带出 paths.json），再到新客户端 `import-torrents.sh`，路径自动还原。`--save-path` 只对 paths.json 里没有的种子兜底。
 
 ## 进度接续说明
 
