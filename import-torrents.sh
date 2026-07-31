@@ -40,6 +40,10 @@ set_lang() {
       T_RESUME_TR_DIR="  Tr resume dir:"; T_RESUME_QB_DIR="  qB BT_backup dir:"
       T_SAVE_TITLE="Save path"; T_SAVE_PROMPT="Download/save dir (empty=client default): "
       T_SAVE_USE="  -> save path:"; T_SAVE_DEFAULT="  -> use client default"
+      T_SAVE_HINT="  This sets where downloaded data files go. Effects:"
+      T_SAVE_HINT_EMPTY="    - Empty + no paths.json: client default dir (re-download from 0)"
+      T_SAVE_HINT_PATHS="    - Empty + paths.json: each torrent restores to its ORIGINAL path (find existing data)"
+      T_SAVE_HINT_INPUT="    - Enter a path: ALL torrents use this dir (consolidate to a new location)"
       T_PATHS_FOUND="  -> paths.json found:"
       T_PATHS_OVERRIDE="  -> your input overrides paths.json records:"
       T_PATHS_RESTORE="  -> will auto-restore each torrent to its original path:"
@@ -87,6 +91,10 @@ set_lang() {
       T_RESUME_TR_DIR="  Tr resume 目录:"; T_RESUME_QB_DIR="  qB BT_backup 目录:"
       T_SAVE_TITLE="保存路径"; T_SAVE_PROMPT="下载/保存目录 (留空=客户端默认): "
       T_SAVE_USE="  → 保存路径:"; T_SAVE_DEFAULT="  → 用客户端默认"
+      T_SAVE_HINT="  此路径决定下载的数据文件存到哪。三种选择的效果："
+      T_SAVE_HINT_EMPTY="    - 留空 + 无 paths.json：用客户端默认目录（从 0 开始下载）"
+      T_SAVE_HINT_PATHS="    - 留空 + 有 paths.json：每个种子恢复到「原路径」去找已有数据"
+      T_SAVE_HINT_INPUT="    - 填路径：所有种子统一用这个目录（适合迁移时换新目录）"
       T_PATHS_FOUND="  → 发现 paths.json:"
       T_PATHS_OVERRIDE="  → 你输入的路径会覆盖 paths.json 记录，共"
       T_PATHS_RESTORE="  → 将按 paths.json 自动恢复每个种子的原路径，共"
@@ -462,7 +470,14 @@ echo
 # 8. 选保存路径
 # ============================================================
 if [ -z "$P_SAVE" ]; then
-  printf "【$T_SAVE_TITLE】$T_SAVE_PROMPT"
+  echo "【$T_SAVE_TITLE】"
+  echo "$T_SAVE_HINT"
+  echo "$T_SAVE_HINT_EMPTY"
+  # 是否存在 paths.json (提前判断，用于显示对应提示)
+  _pj=$(dirname "$SRC")/paths.json
+  if [ -f "$_pj" ]; then echo "$T_SAVE_HINT_PATHS"
+  else echo "$T_SAVE_HINT_INPUT"; fi
+  printf "$T_SAVE_PROMPT"
   read SAVE_INPUT
   SAVE_PATH="$SAVE_INPUT"
 else
