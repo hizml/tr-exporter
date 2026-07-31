@@ -192,24 +192,31 @@ while read -r line; do
   printf "  %s) %s\n" "$i" "$line"
   i=$((i+1))
 done < /tmp/tr_list.txt
-ALL_N=$i
-printf "  %s) 全部导出\n" "$ALL_N"
+ALL_N=$((i-1))
+printf "  a) 全部导出\n"
 echo
 
 # ============================================================
 # 7. 选择 Tracker
 # ============================================================
-printf "选择序号，或直接输入关键字 (留空=全部): "
-read SEL
-KEY=""
-if echo "$SEL" | grep -qE '^[0-9]+$'; then
-  if [ "$SEL" -eq "$ALL_N" ]; then KEY=""; echo "→ 全部导出"
-  else KEY=$(sed -n "${SEL}p" /tmp/tr_list.txt); echo "→ 选择: $KEY"; fi
-elif [ -z "$SEL" ]; then
-  echo "→ 全部导出"
-else
-  KEY="$SEL"; echo "→ 关键字: $KEY"
-fi
+# 留空不再默认"全部"，避免误触；必须显式输 a 才全部，输错则重新提示
+while true; do
+  printf "选择序号 / 关键字 / 输入 a 全部导出: "
+  read SEL
+  KEY=""
+  if [ "$SEL" = "a" ] || [ "$SEL" = "A" ]; then
+    echo "→ 全部导出"; break
+  elif echo "$SEL" | grep -qE '^[0-9]+$'; then
+    if [ "$SEL" -ge 1 ] && [ "$SEL" -le "$ALL_N" ]; then
+      KEY=$(sed -n "${SEL}p" /tmp/tr_list.txt); echo "→ 选择: $KEY"; break
+    fi
+    echo "  ⚠️ 序号超出范围 (1-$ALL_N)，请重新输入"
+  elif [ -z "$SEL" ]; then
+    echo "  ⚠️ 不能留空，输入序号 / 关键字 / a(全部)"
+  else
+    KEY="$SEL"; echo "→ 关键字: $KEY"; break
+  fi
+done
 echo
 
 # ---------- 是否同时导出进度文件 ----------
