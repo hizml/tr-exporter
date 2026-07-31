@@ -16,7 +16,7 @@ Transmission / qBittorrent 的种子管理工具集——批量**导入 / 导出
 | 脚本 | 功能 | 状态 |
 |------|------|------|
 | `export-torrents.sh` | 按 Tracker 批量**导出**种子（含进度文件、增量、报告） | ✅ 可用 |
-| `import-torrents.sh` | 批量**导入**种子到客户端（接续进度迁移） | 🔨 规划中 |
+| `import-torrents.sh` | 批量**导入**种子到客户端（查重跳过、接续进度） | ✅ 可用 |
 
 ## 解决什么问题
 
@@ -204,6 +204,62 @@ sh export-torrents.sh --update
 ```
 
 会检查 GitHub 最新版本，有新版时自动覆盖升级（原文件备份为 `.bak`），已是最新则提示。
+
+---
+
+# 导入种子 (import-torrents.sh)
+
+`import-torrents.sh` 是导出脚本的**镜像工具**——把一批 `.torrent` 文件批量导入到 Transmission / qBittorrent，支持查重跳过和进度接续。适合把导出的种子迁移到另一台客户端。
+
+## 快速使用
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hizml/torrent-toolkit/main/import-torrents.sh -o /tmp/import.sh && sh /tmp/import.sh
+```
+
+交互式依次输入：客户端 → 地址端口 → 账号密码 → **种子来源目录** → 是否接续进度 → 保存路径。
+
+## 命令行参数
+
+```sh
+sh import-torrents.sh [OPTIONS]
+
+  --lang zh|en        语言
+  --client tr|qb      客户端
+  --host HOST         主机
+  --port PORT         端口
+  --user USER:PASS    认证
+  --src DIR           种子来源目录（含 .torrent）
+  --resume            接续进度文件（.resume/.fastresume）
+  --no-resume         仅导入种子（默认）
+  --save-path DIR     下载/保存目录（留空=客户端默认）
+  --no-skip-dup       不跳过重复种子
+  --skip-dup          跳过重复种子（默认）
+  --update            检查更新
+  --help              显示帮助
+```
+
+**示例——把导出的种子导入新客户端**：
+
+```sh
+sh import-torrents.sh --lang zh --client tr --host 127.0.0.1 --port 9091 \
+                     --user qnap:qnap --src /config/export_20260731_000710 \
+                     --resume --save-path /Download
+```
+
+## 进度接续说明
+
+选 `--resume` 时，脚本会把 `.resume`（Tr）/ `.fastresume`（qB）复制回客户端对应目录。**但需要重启客户端才生效**，且要求新机器上数据文件路径与原机器一致——路径不一致时需重新校验。
+
+> ⚠️ 脚本只负责复制进度文件，**不修改文件内记录的路径**。跨路径迁移（数据文件位置变了）需用 `qbfrt` 等专门工具修改 `.fastresume` 内的路径，超出本脚本范围。
+
+## 导入原理
+
+| | Transmission | qBittorrent |
+|---|---|---|
+| 添加 | `torrent-add`（`filename` 本地路径） | `torrents/add`（multipart 上传文件） |
+| 重复判断 | `result: duplicate torrent` | body `Fails.` |
+| 进度文件 | `<hash>.resume` → resume 目录 | `<hash>.fastresume` → BT_backup |
 
 ## 两种客户端的导出原理
 

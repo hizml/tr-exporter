@@ -14,7 +14,7 @@ Perfect for **Docker-based clients running on QNAP / Synology NAS** — no SSH r
 | Script | Purpose | Status |
 |--------|---------|--------|
 | `export-torrents.sh` | Batch **export** torrents by tracker (with progress, incremental, report) | ✅ Available |
-| `import-torrents.sh` | Batch **import** torrents into a client (resume-aware migration) | 🔨 Planned |
+| `import-torrents.sh` | Batch **import** torrents into a client (dedup, progress restore) | ✅ Available |
 
 ## What problem does it solve?
 
@@ -197,6 +197,62 @@ sh export-torrents.sh --update
 ```
 
 Checks GitHub for the latest version; auto-upgrades (backing up the original as `.bak`) when newer, or confirms you're up to date.
+
+---
+
+# Import torrents (import-torrents.sh)
+
+`import-torrents.sh` is the **mirror** of the export script — batch-import `.torrent` files into Transmission / qBittorrent, with duplicate skipping and progress restoration. Ideal for migrating exported torrents to another client.
+
+## Quick start
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hizml/torrent-toolkit/main/import-torrents.sh -o /tmp/import.sh && sh /tmp/import.sh
+```
+
+Interactive prompts: client → host/port → credentials → **source dir** → restore progress? → save path.
+
+## Command-line options
+
+```sh
+sh import-torrents.sh [OPTIONS]
+
+  --lang zh|en        Language
+  --client tr|qb      Client
+  --host HOST         Web host
+  --port PORT         Web port
+  --user USER:PASS    Auth credentials
+  --src DIR           Source dir containing .torrent files
+  --resume            Restore progress files (.resume/.fastresume)
+  --no-resume         Import torrents only (default)
+  --save-path DIR     Download/save directory (empty=client default)
+  --no-skip-dup       Do not skip duplicate torrents
+  --skip-dup          Skip duplicates (default)
+  --update            Check for updates
+  --help              Show help
+```
+
+**Example — import exported torrents into a new client:**
+
+```sh
+sh import-torrents.sh --lang en --client tr --host 127.0.0.1 --port 9091 \
+                     --user qnap:qnap --src /config/export_20260731_000710 \
+                     --resume --save-path /Download
+```
+
+## Progress restoration notes
+
+With `--resume`, the script copies `.resume` (Tr) / `.fastresume` (qB) back into the client's config dir. **A client restart is required to apply them**, and the data file paths on the new machine must match the original — otherwise a recheck is needed.
+
+> ⚠️ The script only copies progress files; it does **NOT** rewrite paths inside them. Cross-path migration (data moved) requires tools like `qbfrt` to patch `.fastresume` paths, which is beyond this script's scope.
+
+## How import works per client
+
+| | Transmission | qBittorrent |
+|---|---|---|
+| Add | `torrent-add` (`filename` local path) | `torrents/add` (multipart upload) |
+| Duplicate | `result: duplicate torrent` | body `Fails.` |
+| Progress file | `<hash>.resume` → resume dir | `<hash>.fastresume` → BT_backup |
 
 ## How export works per client
 
