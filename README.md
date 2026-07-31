@@ -182,7 +182,13 @@ sh export-torrents.sh --lang zh --client tr --host 127.0.0.1 --port 9091 \
 跳过已导出: 93 个        ← 第二次运行，只导了 3 个新的
 ```
 
-适合配合固定 `--out` 目录做**定期增量备份**。
+> 💡 增量模式的关键是**重复跑用同一个目录**。所以 `--incr` 默认不再用带时间戳的目录，而是按 tracker 自动用固定目录：
+> - `--tracker soulvoice --incr` → `/config/backup_soulvoice/`
+> - `--tracker a --incr`（全部）→ `/config/backup_all/`
+>
+> 这样不传 `--out` 也能直接生效。当然你也可以显式 `--out /your/dir` 指定。
+
+适合做**定期增量备份**（写进 crontab，只补新增种子）。注意它是**只增不减**——远端种子被删除时不会从备份目录移除。
 
 ## 自更新
 

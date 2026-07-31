@@ -175,7 +175,13 @@ Torrents: 3
 Skipped (already exported): 93      ← second run, only 3 new ones
 ```
 
-Great for **periodic incremental backups** with a fixed `--out` directory.
+> 💡 Incremental mode needs **the same dir across runs**. So `--incr` no longer uses a timestamped dir — it defaults to a tracker-named fixed dir:
+> - `--tracker soulvoice --incr` → `/config/backup_soulvoice/`
+> - `--tracker a --incr` (all) → `/config/backup_all/`
+>
+> This works out of the box without `--out`, though you can still pass `--out /your/dir` explicitly.
+
+Great for **periodic incremental backups** (in crontab, top-up new torrents only). Note it's **add-only** — torrents deleted on the client are NOT removed from the backup dir.
 
 ## Self-update
 

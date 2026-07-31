@@ -572,6 +572,17 @@ echo
 # ============================================================
 if [ -n "$P_OUT" ]; then
   OUT="$P_OUT"
+elif [ "$P_INCR" = "1" ]; then
+  # 增量模式: 默认用按 tracker 命名的固定目录，这样重复跑是同一目录，增量才生效
+  if [ -z "$KEY" ]; then
+    OUT="/config/backup_all"
+  elif [ "$KEY" = "__NONE__" ]; then
+    OUT="/config/backup_no_tracker"
+  else
+    # tracker 关键字清理成合法目录名(只保留字母数字点下划线)
+    SAFE_KEY=$(printf '%s' "$KEY" | tr -cd 'A-Za-z0-9._-')
+    OUT="/config/backup_${SAFE_KEY}"
+  fi
 else
   OUT="/config/export_$(date +%Y%m%d_%H%M%S)"
 fi
