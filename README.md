@@ -84,13 +84,13 @@ sh /tmp/export.sh
 
 种子目录: /config/torrents
 
-===== Tracker 列表 =====
-  1) pt.soulvoice.club
-  2) tracker.m-team.cc
+===== Tracker 列表 (含种子数) =====
+  1) pt.soulvoice.club (96 个)
+  2) tracker.m-team.cc (312 个)
   ...
-  5) 全部导出
+  a) 全部导出 (470 个)
 
-选择序号，或直接输入关键字(留空=全部): 1
+选择序号 / 关键字 / 输入 a 全部导出: 1
 → 选择: pt.soulvoice.club
 
 [OK]   电影A

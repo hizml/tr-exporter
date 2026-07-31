@@ -194,23 +194,28 @@ fi
 # ============================================================
 # 6. 列出 Tracker
 # ============================================================
-echo "===== Tracker 列表 ====="
+echo "===== Tracker 列表 (含种子数) ====="
+# 统计每个 tracker 域名下的种子数量，输出两列: "域名<TAB>数量"
+# Transmission: 一个种子可能有多个 tracker，此处按 announce 条数统计(多数场景够用)
+# qBittorrent: tracker 字段是单个字符串，直接按域名聚合
 if [ "$CLIENT" = "tr" ]; then
   curl -s $AUTH -H "X-Transmission-Session-Id: $SID" "$RPC" \
     -d '{"method":"torrent-get","arguments":{"fields":["trackers"]}}' \
-    | jq -r '.arguments.torrents[].trackers[].announce'
+    | jq -r '[.arguments.torrents[].trackers[].announce | sub("^https?://"; "") | sub("/.*$"; "")] | group_by(.)[] | "\(.[0])\t\(length)"' 2>/dev/null
 else
   curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
-    | jq -r '.[].tracker'
-fi | sed -E 's#https?://([^/]+).*#\1#' | sort -u > /tmp/tr_list.txt
+    | jq -r '[.[].tracker | sub("^https?://"; "") | sub("/.*$"; "")] | group_by(.)[] | "\(.[0])\t\(length)"' 2>/dev/null
+fi | sort -t"	" -k1 > /tmp/tr_list.txt
 
+# 显示列表: "  序号) 域名 (N 个种子)"
 i=1
-while read -r line; do
-  printf "  %s) %s\n" "$i" "$line"
+while IFS="	" read -r domain count; do
+  [ -z "$domain" ] && continue
+  printf "  %s) %s (%s 个)\n" "$i" "$domain" "$count"
   i=$((i+1))
 done < /tmp/tr_list.txt
 ALL_N=$((i-1))
-printf "  a) 全部导出\n"
+printf "  a) 全部导出 (%s 个)\n" "$COUNT"
 echo
 
 # ============================================================
@@ -225,7 +230,7 @@ while true; do
     echo "→ 全部导出"; break
   elif echo "$SEL" | grep -qE '^[0-9]+$'; then
     if [ "$SEL" -ge 1 ] && [ "$SEL" -le "$ALL_N" ]; then
-      KEY=$(sed -n "${SEL}p" /tmp/tr_list.txt); echo "→ 选择: $KEY"; break
+      KEY=$(sed -n "${SEL}p" /tmp/tr_list.txt | cut -f1); echo "→ 选择: $KEY"; break
     fi
     echo "  ⚠️ 序号超出范围 (1-$ALL_N)，请重新输入"
   elif [ -z "$SEL" ]; then
