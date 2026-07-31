@@ -117,6 +117,27 @@ find_first_dir() {
   return 1
 }
 
+# 工具函数: 在多个同名目录里，选出「最匹配种子 hash」的那个
+#   find_best_resume_dir <目录名> <后缀> <候选hash1> [候选hash2] ...
+# 逻辑: 遍历所有同名目录，统计能命中多少个候选 hash 的进度文件，返回命中数最多的目录
+find_best_resume_dir() {
+  _name="$1"; _suf="$2"; shift 2
+  find / -type d -name "$_name" 2>/dev/null > /tmp/tr_find_$$.txt
+  _best=""; _best_hit=0
+  while IFS= read -r _d; do
+    [ -z "$_d" ] && continue
+    has_hex_files "$_d" "$_suf" 0 || continue
+    _hit=0
+    for _h in "$@"; do
+      [ -n "$_h" ] && [ -e "$_d/${_h}.${_suf}" ] && _hit=$((_hit+1))
+    done
+    if [ "$_hit" -gt "$_best_hit" ]; then _best_hit=$_hit; _best=$_d; fi
+  done < /tmp/tr_find_$$.txt
+  rm -f /tmp/tr_find_$$.txt
+  [ -n "$_best" ] && printf '%s' "$_best" && return 0
+  return 1
+}
+
 # ============================================================
 # 4. 连接 + 认证
 # ============================================================
@@ -168,13 +189,7 @@ if [ "$CLIENT" = "tr" ] && [ -n "$TORRENTS_DIR" ]; then
   TR_RESUME_DIR=$(dirname "$TORRENTS_DIR")/resume
   [ -d "$TR_RESUME_DIR" ] || TR_RESUME_DIR=""
 fi
-# qBittorrent 的进度目录: BT_backup(<hash>.fastresume)
-# 注意: hash 长度不固定(v1 种子=40位, v2 种子/混合=64位)，BT_backup 名字本身已足够独特，
-#       所以这里用 len=0 不校验 hex 长度，只要含 .fastresume 文件就认
-QB_RESUME_DIR=""
-if [ "$CLIENT" = "qb" ]; then
-  QB_RESUME_DIR=$(find_first_dir BT_backup fastresume 0)
-fi
+# qBittorrent 的进度目录定位推迟到第 7.5 步(需要种子 hash 才能反查多个 BT_backup)
 
 # ============================================================
 # 6. 列出 Tracker
@@ -221,6 +236,28 @@ while true; do
 done
 echo
 
+# ---------- 7.5 定位 qB 进度目录 (用种子 hash 反查多个 BT_backup，选命中率最高的) ----------
+QB_RESUME_DIR=""
+if [ "$CLIENT" = "qb" ]; then
+  # 取前若干个种子的 hash 作为样本，用于反查哪个 BT_backup 命中率最高
+  # 用 ascii_downcase + contains 做大小写不敏感的纯字符串匹配(避免 KEY 含正则元字符)
+  KEY_LOWER=$(printf '%s' "$KEY" | tr '[:upper:]' '[:lower:]')
+  if [ -z "$KEY" ]; then
+    SAMPLE_HASHES=$(curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
+      | jq -r '.[0:5][].hash' 2>/dev/null)
+  else
+    SAMPLE_HASHES=$(curl -s -b "$COOKIE" -H "Referer: $BASE" "$API/torrents/info" \
+      | jq -r --arg k "$KEY_LOWER" '[.[] | select((.tracker|ascii_downcase)|contains($k))][0:5][].hash' 2>/dev/null)
+  fi
+  if [ -n "$SAMPLE_HASHES" ]; then
+    QB_RESUME_DIR=$(find_best_resume_dir BT_backup fastresume $SAMPLE_HASHES)
+  fi
+  # 样本命中失败则退回到「文件最多的目录」
+  if [ -z "$QB_RESUME_DIR" ]; then
+    QB_RESUME_DIR=$(find_first_dir BT_backup fastresume 0)
+  fi
+fi
+
 # ---------- 是否同时导出进度文件 ----------
 EXPORT_RESUME="n"
 if [ "$CLIENT" = "tr" ]; then
@@ -265,7 +302,7 @@ if [ "$CLIENT" = "tr" ]; then
   | jq -c '.arguments.torrents[]' | while read -r t; do
       MATCH=0
       if [ -z "$KEY" ]; then MATCH=1
-      elif echo "$t" | jq -r '.trackers[].announce' | grep -qi "$KEY"; then MATCH=1; fi
+      elif echo "$t" | jq -r '.trackers[].announce' | grep -qiF "$KEY"; then MATCH=1; fi
       if [ "$MATCH" = "1" ]; then
         name=$(echo "$t" | jq -r '.name')
         hash=$(echo "$t" | jq -r '.hashString')
@@ -294,7 +331,7 @@ else
         tracker=$(echo "$t" | jq -r '.tracker')
         MATCH=0
         if [ -z "$KEY" ]; then MATCH=1
-        elif echo "$tracker" | grep -qi "$KEY"; then MATCH=1; fi
+        elif echo "$tracker" | grep -qiF "$KEY"; then MATCH=1; fi
         if [ "$MATCH" = "1" ]; then
           dst="$OUT/torrents/${hash}.torrent"
           http=$(curl -s -b "$COOKIE" -H "Referer: $BASE" -o "$dst" -w "%{http_code}" \
